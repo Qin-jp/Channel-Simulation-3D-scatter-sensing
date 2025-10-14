@@ -1,5 +1,4 @@
-from utils_sionna.utils import preprocess_complex_csi, cell_ids_2_positions, position_2_cell_idx,\
-    gen_CSI_matrix_and_scatter_position_matrix
+from utils_sionna.utils import gen_CSI_matrix_and_scatter_position_matrix
 import numpy as np
 import os
 import json

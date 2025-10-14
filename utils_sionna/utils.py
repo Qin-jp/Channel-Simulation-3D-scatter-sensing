@@ -1,47 +1,41 @@
-
 import sionna
 import numpy as np
 import matplotlib.pyplot as plt
 #from sionna.rt.utils import OFDMModulator, OFDMDemodulator
 from sionna.rt import load_scene, PlanarArray, Transmitter, Receiver, RadioMapSolver, RadioMap
 from math import sqrt, log10
-
 import drjit as dr
-
 import matplotlib.pyplot as plt
-
 from sionna.rt import LambertianPattern, DirectivePattern, BackscatteringPattern,\
                       load_scene, Camera, Transmitter, Receiver, PlanarArray,\
                       PathSolver, RadioMapSolver, cpx_abs, cpx_convert
 
 def preprocess_complex_csi(sorted_csi):
     # 
-    #     将复数 CSI 拆分成实部和虚部并拼接，返回实数张量。
-    #     输入 shape: (L, N), dtype: complex64
-    #     输出 shape: (L, 2N), dtype: float32
+    #     Turns complex CSI into real and imaginary parts.
+    #     input shape: (L, N), dtype: complex64
+    #     output shape: (2, L, N), dtype: float32
     # 
     real_part = np.real(sorted_csi)
     imag_part = np.imag(sorted_csi)    
-        # 沿新维度堆叠 (shape=(L, 2, N))
-    csi_realimag = np.stack([real_part, imag_part], axis=1)    
-        # 确保 dtype 是 float32
+    csi_realimag = np.stack((real_part, imag_part), axis=0)
     return csi_realimag.astype(np.float32)
     
 
 
 def cell_ids_2_positions(cell_ids,rm,radiomap_shape,cell_size):
     """
-    将 cell_ids 转换为位置
+    Convert cell_ids to positions.
 
-    参数:
-        cell_ids: ndarray，形状为 (N,2)    
-        rm: RadioMap 对象
-        radiomap_shape: tuple，形状为 (2,)
-        cell_size: list，单元格大小,为浮点数二维数组[[0.1,0.1]]  
-    返回:
-        positions: ndarray，形状为 (N, 3)
+    Args:
+        cell_ids: ndarray, shape (N, 2)  
+        rm: RadioMap object  
+        radiomap_shape: tuple, shape (2,)  
+        cell_size: list, the size of each cell, a 2D float array like [[0.1, 0.1]]  
+
+    Returns:
+        positions: ndarray, shape (N, 3)
     """
-    #cell_ids = np.squeeze(cell_ids, axis=0)
     cell_positions = np.zeros((len(cell_ids), 3))
     for i, cell_id in enumerate(cell_ids):
         cell_positions[i,0]=((cell_id[1]-radiomap_shape[1]/2)*cell_size[0,0]+rm._center[0])[0]
@@ -51,19 +45,22 @@ def cell_ids_2_positions(cell_ids,rm,radiomap_shape,cell_size):
 
 def position_2_cell_idx(positions,rm,radiomap_shape,cell_size):
     """
-    将位置转换为单元格索引
-    参数:
-        positions: ndarray，形状为 (N,3)
-        radiomap_shape: tuple，形状为 (2,)
-        cell_size: list，单元格大小,为浮点数二维数组[[0.1,0.1]]   
-    返回:
-        cell_ids: ndarray，形状为 (N,2)
+    Convert positions to cell indices.
+
+    Args:
+        positions: ndarray, shape (N, 3)  
+        radiomap_shape: tuple, shape (2,)  
+        cell_size: list, the size of each cell, a 2D float array like [[0.1, 0.1]]  
+
+    Returns:
+        cell_ids: ndarray, shape (N, 2)
     """
     cell_ids = np.zeros((len(positions), 2))
     for i, pos in enumerate(positions): 
         cell_ids[i,1]=np.floor((pos[0]-rm._center[0])/cell_size[0,0]+radiomap_shape[1]/2)[0]
         cell_ids[i,0]=np.floor((pos[1]-rm._center[1])/cell_size[0,0]+radiomap_shape[0]/2)[0]
     return cell_ids
+
 # def gen_N_paths(coordstart,coordend,rm,radiomap_shape,cell_size,pathNum,patNum,step):
 #     """
 #     生成 N 条路径
@@ -95,57 +92,82 @@ def position_2_cell_idx(positions,rm,radiomap_shape,cell_size):
 #         cell_ids[i*patNum:(i+1)*patNum]=ceil_ids_path
 #     return positions, cell_ids
 
-
-    
-
-def gen_CSI_matrix_and_scatter_position_matrix(config):
-    pathNum = config["pathNum"]  
-    velocity_max = config["velocity_max"]
+def create_scene(config):
     Tx_setting = config["Tx_setting"]
     Rx_setting = config["Rx_setting"]
     scattering_coefficient = config["scattering_coefficient"]
-    scattering_pattern = config["scattering_pattern"]
-    cell_size = config["cell_size"]
-    bandwidth = config["bandwidth"]
+    scattering_pattern_alpha = config["scattering_pattern_alpha"]
     frequency = config["frequency"]
     
     scene = load_scene(sionna.rt.scene.munich)
-    scene.frequency = 30e9
-    scene.tx_array = PlanarArray(num_rows=4,
-                             num_cols=8,
-                             vertical_spacing=0.5,
-                             horizontal_spacing=0.5,
-                             pattern="tr38901",
-                             polarization="V")
+    scene.frequency = frequency
+    scene.tx_array = PlanarArray(num_rows=Tx_setting["num_rows"],
+                                 num_cols=Tx_setting["num_cols"],
+                                 vertical_spacing=Tx_setting["vertical_spacing"],
+                                 horizontal_spacing=Tx_setting["horizontal_spacing"],
+                                 pattern=Tx_setting["antenna pattern"],#"tr38901"
+                                 polarization=Tx_setting["polarization"])#"V"
 
-    scene.rx_array = PlanarArray(num_rows=1,
-                             num_cols=1,
-                             vertical_spacing=0.5,
-                             horizontal_spacing=0.5,
-                             pattern="tr38901",
-                             polarization="V")
-    scene.add(Transmitter(name="tx",
-                      position=[-100,-150,32],
-                      orientation=[0,0,0]))
-
-    rm_solver = RadioMapSolver()
-
-# Configure radio materials for scattering
-# By default the scattering coefficient is set to zero
+    scene.rx_array = PlanarArray(num_rows=Rx_setting["num_rows"],
+                                 num_cols=Rx_setting["num_cols"],
+                                 vertical_spacing=Rx_setting["vertical_spacing"],
+                                 horizontal_spacing=Rx_setting["horizontal_spacing"],
+                                 pattern=Rx_setting["antenna pattern"],#"tr38901"
+                                 polarization=Rx_setting["polarization"])#"V
+    
+    scene.add(Transmitter(name="Tx",
+              position=Tx_setting["position"],#[-100,-150,32]
+              orientation=Tx_setting["orientation"]))#[0,0,0]
+    # Configure radio materials for scattering
+    # By default the scattering coefficient is set to zero
     for rm in scene.radio_materials.values():
-        rm.scattering_coefficient = 1/sqrt(3) # Try different values in [0,1]
-        rm.scattering_pattern = DirectivePattern(alpha_r=10) # Play around with different values of alpha_r
+        rm.scattering_coefficient = scattering_coefficient # 1/sqrt(3)
+        rm.scattering_pattern = DirectivePattern(alpha_r=scattering_pattern_alpha) # 10
 
-    rm_scat = rm_solver(scene, cell_size=[0.1,0.1], samples_per_tx=int(20e6), max_depth=5,
-                    refraction=False, diffuse_reflection=True)
+    return scene
 
-    radiomap_matrix=rm_scat.transmitter_radio_map(metric="path_gain")
+def sample_rx(Tx_position, Rx_height_max, sample_radis, num_samples):
+    """
+    Sample receiver positions around a transmitter position.
+
+    Args:
+        Tx_position: list, shape (3,)  
+        Rx_height_max: float, maximum height of the receiver  
+        sample_radis: float, sampling radius
+        num_samples: int, number of samples  
+
+    Returns:
+        positions: ndarray, shape (num_samples, 3)
+    """
+    Tx_position = np.array(Tx_position).squeeze()
+    positions = np.zeros((num_samples, 3))
+    for i in range(num_samples):
+        angle = np.random.uniform(0, 2 * np.pi)
+        distance = np.random.uniform(0, sample_radis)
+        positions[i, 0] = Tx_position[0] + distance * np.cos(angle)
+        positions[i, 1] = Tx_position[1] + distance * np.sin(angle)
+        positions[i, 2] = np.random.uniform(1.5, Rx_height_max)
+    return positions
+
+def gen_CSI_matrix_and_scatter_position_matrix(config):
+    velocity_max = config["velocity_max"]
+    Rx_setting = config["Rx_setting"]
+    cell_size = config["cell_size"]
+    #bandwidth = config["bandwidth"]
+    
+    scene = create_scene(config)
+
+    # rm_scat = rm_solver(scene,
+    #                     cell_size=cell_size,
+    #                     samples_per_tx=int(20e6),
+    #                     max_depth=5,
+    #                     refraction=False, diffuse_reflection=True)
+
+    # radiomap_matrix=rm_scat.transmitter_radio_map(metric="path_gain")
 
     #start_end_cell_ids = [[7500,8100],[8000,8500]]
 
     #start_end_cell_ids_test = [[7500,8500],[7600,8600]]
-
-    start_end_positions = cell_ids_2_positions(start_end_cell_ids,rm_scat,radiomap_matrix.shape,rm_scat.cell_size)
 
     # positions,cell_ids=gen_N_paths(start_end_positions[0][0:2],
     #                            start_end_positions[1][0:2],
@@ -156,17 +178,25 @@ def gen_CSI_matrix_and_scatter_position_matrix(config):
 # print("Shape of positions: ", positions.shape)
 # print("Shape of cell_ids: ", cell_ids.shape)
 
+    positions = sample_rx(scene.transmitters["Tx"].position, config["Rx_height_max"], config["sample_radis"], num_samples=1024)
+
     for i,p in enumerate(positions):
-        rx = Receiver(name=f"rx-{i}",
+        speed = np.random.uniform(0, velocity_max) 
+        theta = np.random.uniform(0, np.pi) if p[2] > 2 else 0.5 * np.pi #consider horizontal movement if height > 2m
+        phi = np.random.uniform(0, 2 * np.pi)
+        velocity = [speed * np.sin(theta) * np.cos(phi),
+                    speed * np.sin(theta) * np.sin(phi),
+                    speed * np.cos(theta)]
+        rx = Receiver(name=f"Rx-{i}",
                 position=p,
-                orientation=[0,0,0])
-        # 添加用户的随机速度
+                orientation=Rx_setting["orientation"],#[0,0,0]
+                )#velocity=velocity)        
         scene.add(rx)
     
 
-    bandwidth=100e6 # bandwidth of the receiver (= sampling frequency)
+    bandwidth=Rx_setting["bandwidth"] # bandwidth of the receiver (= sampling frequency)
     
-#plt.figure()
+    plt.figure()
     p_solver = PathSolver()
 
 
@@ -189,7 +219,7 @@ def gen_CSI_matrix_and_scatter_position_matrix(config):
     CSI=np.fft.fft(taps_diff, axis=-1)
     CSI = np.fft.fftshift(CSI, axes=-1)
 
-    return CSI, positions, cell_ids, radiomap_matrix
+    return CSI
 
 # print("Shape of CSI: ", CSI.shape)
 # print("Shape of Position",positions.shape)
@@ -200,12 +230,12 @@ if __name__ == "__main__":
     # CSI_matrix = np.array([])
     # positions_matrix = np.array([])
     # cell_ids_matrix = np.array([])
-    Train_MaxTimes=10
+    Train_MaxTimes=1
     start_end_cell_ids_Train = [[7500,8100],[8000,8500]]
     for i in range(Train_MaxTimes):
         print("第",i,"次")
         # 生成 CSI 矩阵和位置矩阵
-        CSI, positions, cell_ids, radiomap = gen_CSI_matrix_and_position_matrix(pathNum=1024,patNum=6,step=0.1,start_end_cell_ids=start_end_cell_ids_Train)
+        CSI, positions, cell_ids, radiomap = gen_CSI_matrix_and_scatter_position_matrix(pathNum=1024,patNum=6,step=0.1,start_end_cell_ids=start_end_cell_ids_Train)
         if i==0:
             CSI_matrix = CSI
             positions_matrix = positions
