@@ -1,7 +1,7 @@
 {
     "Tx_setting": {
-        "num_rows": 4,
-        "num_cols": 4,
+        "num_rows": 16,
+        "num_cols": 16,
         "vertical_spacing": 0.5,
         "horizontal_spacing": 0.5,
         "antenna pattern": "tr38901",
@@ -22,9 +22,9 @@
     "scattering_coefficient": 0.577,
     "scattering_pattern_alpha": 10,
     "frequency": 3000000000.0,
-    "velocity_max": 3.0,
-    "cell_size": [0.1, 0.1],
-    
+    "velocity_max": 0.0,
+    "cell_size": [0.1, 0.1],    
     "Rx_height_max": 20,
-    "sample_radis":50
+    "sample_radis":100,
+    "num_samples":64
 }

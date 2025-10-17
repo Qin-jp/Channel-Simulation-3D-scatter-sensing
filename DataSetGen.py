@@ -55,13 +55,21 @@ def main(config_folder, output_path):
             print(f"❌ Fail to read or simulate {filename} : {e}")
 
     # 保存结果
-    np.save(output_path, all_results)
+    save_results={"CSI":[], "scatter_positions":[]}
+    for res in all_results:
+        save_results["CSI"].extend(res["CSI"])
+        save_results["scatter_positions"].extend(res["scatter_positions"])
+    print(f"\nTotal samples: {len(save_results['CSI'])}")
+    # print(f"Sample CSI shape: {np.array(save_results['CSI']).shape}")
+    # print(f"Sample scatter_positions shape: {len(save_results['scatter_positions'])}")
+    # print(save_results['scatter_positions'])
+    np.save(output_path, save_results)
     print(f"\n✅ All completed, save to {output_path}")
 
 
 if __name__ == "__main__":
     config_folder = "./configs"         
-    output_path = "./dataset/sim_results.npy"  # save path
+    output_path = "./dataset/sim_results20251016.npy"  # save path
     main(config_folder, output_path)
 
 
