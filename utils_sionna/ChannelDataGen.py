@@ -4,6 +4,7 @@ from sionna.rt import load_scene, PlanarArray, Transmitter, Receiver, RadioMapSo
 from sionna.rt import LambertianPattern, DirectivePattern, BackscatteringPattern,\
                       load_scene, Camera, Transmitter, Receiver, PlanarArray,\
                       PathSolver, RadioMapSolver, cpx_abs, cpx_convert
+
 import mitsuba as mi
 
 def preprocess_complex_csi(sorted_csi):
@@ -19,8 +20,6 @@ def preprocess_complex_csi(sorted_csi):
     csi_realimag = np.stack((real_part, imag_part), axis=0)
     return csi_realimag.astype(np.float32)
     
-
-
 def cell_ids_2_positions(cell_ids,rm,radiomap_shape,cell_size):
     """
     Convert cell_ids to positions.
@@ -58,7 +57,6 @@ def position_2_cell_idx(positions,rm,radiomap_shape,cell_size):
         cell_ids[i,1]=np.floor((pos[0]-rm._center[0])/cell_size[0,0]+radiomap_shape[1]/2)[0]
         cell_ids[i,0]=np.floor((pos[1]-rm._center[1])/cell_size[0,0]+radiomap_shape[0]/2)[0]
     return cell_ids
-
 
 def create_scene(config):
     Tx_setting = config["Tx_setting"]
@@ -202,7 +200,6 @@ def get_scatter_pos_and_attached_data(paths_obj,CSI,scene):
         print("amp_data: ", complex_a[Rx_id,:,Tx_id,0,valid_paths])
     return CSI_data,Scatter_pos_data,Tx_data,Rx_data,amp_data
 
-
 def gen_CSI_matrix_and_scatter_position_matrix(config):
     """
     Generate CSI matrix and scatter position matrix based on the given configuration.
@@ -253,11 +250,16 @@ def gen_CSI_matrix_and_scatter_position_matrix(config):
                  synthetic_array=True)   
 
 # Compute channel taps with scattering
-    taps_diff = paths_diff.taps(bandwidth, l_min=0, l_max=63, normalize=True, out_type="numpy")
-    taps_diff = np.squeeze(taps_diff)
+    frequencies= np.linspace(scene.frequency[0] - bandwidth / 2, scene.frequency[0] + bandwidth / 2, Rx_setting["num_subcarrier"])
     
+    h_freq=paths_diff.cfr(frequencies=frequencies, normalize=True, out_type="numpy")
+    print("h_freq shape:", h_freq.shape)
+    # taps_diff = paths_diff.taps(bandwidth, l_min=0, l_max=63, normalize=True, out_type="numpy")
+    # taps_diff = np.squeeze(taps_diff)
+    h_freq =np.reshape(h_freq,(h_freq.shape[0],Tx_setting["num_rows"]*Tx_setting["num_cols"],h_freq.shape[-1])) #(Rx_num, num_row, num_col num_subcarrier)
 
-    CSI = np.fft.fft(taps_diff, axis=-1)
+    # CSI = np.fft.fft(taps_diff, axis=-1)
+    CSI = h_freq
     CSI = AntennaFreq2AngleDelay(CSI, num_rows=Tx_setting["num_rows"], num_cols=Tx_setting["num_cols"])
     CSI = preprocess_complex_csi(CSI)
     print("CSI shape:", CSI.shape)
@@ -271,5 +273,6 @@ def gen_CSI_matrix_and_scatter_position_matrix(config):
             "scatter_positions":scatter_pos,
             "Tx_positions":Tx_pos,
             "Rx_positions":Rx_pos,
-            "amp_data":amp_data}
+            "amp_data":amp_data,
+            "Tx_orientations":np.array(np.repeat(scene.transmitters["Tx"].orientation,len(CSI),axis=-1)).reshape(len(CSI),3)}
 

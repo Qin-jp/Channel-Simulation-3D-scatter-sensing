@@ -17,7 +17,8 @@
         "antenna pattern": "tr38901",
         "polarization": "V",
         "orientation":[0,0,0],
-        "bandwidth": 100000000.0
+        "bandwidth": 100000000.0,
+        "num_subcarrier":1024
     },
     "scattering_coefficient": 0.577,
     "scattering_pattern_alpha": 10,
@@ -26,5 +27,6 @@
     "cell_size": [0.1, 0.1],    
     "Rx_height_max": 20,
     "sample_radis":100,
-    "num_samples":64
+    "num_samples":16,
+    "total_sim_num":30
 }

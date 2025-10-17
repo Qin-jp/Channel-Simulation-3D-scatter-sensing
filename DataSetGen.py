@@ -1,4 +1,4 @@
-from utils_sionna.utils import gen_CSI_matrix_and_scatter_position_matrix
+from utils_sionna.ChannelDataGen import gen_CSI_matrix_and_scatter_position_matrix
 import numpy as np
 import os
 import json
@@ -38,6 +38,8 @@ def main(config_folder, output_path):
     ]
     config_files.sort(key=extract_number)
 
+    
+
     for filename in config_files:
         file_path = os.path.join(config_folder, filename)
 
@@ -46,19 +48,28 @@ def main(config_folder, output_path):
             if is_config_empty(config):
                 print(f"⚠️ skip empty config file: {filename}")
                 continue
-
-            print(f"✅ Simulating: {filename}")
-            result = gen_CSI_matrix_and_scatter_position_matrix(config)
-            all_results.append(result)
+            num_data = 0
+            while True:              
+                print(f"✅ Simulating: {filename}")
+                result = gen_CSI_matrix_and_scatter_position_matrix(config)
+                num_data += len(result["CSI"])
+                print(f"   Current total samples: {num_data}\n")
+                all_results.append(result)
+                if num_data >=config["total_sim_num"]:
+                    print(f"🎉 Reached the target of {config['total_sim_num']} samples. Stopping further simulations.")
+                    break
 
         except Exception as e:
             print(f"❌ Fail to read or simulate {filename} : {e}")
 
     # 保存结果
-    save_results={"CSI":[], "scatter_positions":[]}
+    save_results={"CSI":[], "scatter_positions":[],"Tx_positions":[],"Rx_positions":[],"Tx_orientations":[]}
     for res in all_results:
         save_results["CSI"].extend(res["CSI"])
         save_results["scatter_positions"].extend(res["scatter_positions"])
+        save_results["Tx_positions"].extend(res["Tx_positions"])
+        save_results["Rx_positions"].extend(res["Rx_positions"])
+        save_results["Tx_orientations"].extend(res["Tx_orientations"])
     print(f"\nTotal samples: {len(save_results['CSI'])}")
     # print(f"Sample CSI shape: {np.array(save_results['CSI']).shape}")
     # print(f"Sample scatter_positions shape: {len(save_results['scatter_positions'])}")
@@ -68,8 +79,15 @@ def main(config_folder, output_path):
 
 
 if __name__ == "__main__":
+    import random
+    import tensorflow as tf
+
+    SEED = 42
+    np.random.seed(SEED)
+    random.seed(SEED)
+    tf.random.set_seed(SEED)
     config_folder = "./configs"         
-    output_path = "./dataset/sim_results20251016.npy"  # save path
+    output_path = "./dataset/sim_results20251017.npy"  # save path
     main(config_folder, output_path)
 
 
