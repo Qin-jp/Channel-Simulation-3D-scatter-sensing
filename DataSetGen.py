@@ -77,9 +77,6 @@ def main(config_folder, output_path):
         save_results["Tx_orientations"].extend(res["Tx_orientations"])
         save_results["amplitudes"].extend(res["amp_data"])
     print(f"\nTotal samples: {len(save_results['CSI'])}")
-    # print(f"Sample CSI shape: {np.array(save_results['CSI']).shape}")
-    # print(f"Sample scatter_positions shape: {len(save_results['scatter_positions'])}")
-    # print(save_results['scatter_positions'])
     np.save(output_path, save_results)
     print(f"\n✅ All completed, save to {output_path}")
 

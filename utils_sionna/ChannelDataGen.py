@@ -188,23 +188,26 @@ def get_scatter_pos_and_attached_data(paths_obj,CSI,scene):
         
         LoS_path = [x and y for x,y in zip(interactions[0,Rx_id,Tx_id,:]==0 , significant_paths)]
         if np.sum(LoS_path)>0:
-            Scatter_pos_data.append(np.array(scene.transmitters["Tx"].position).reshape(1,3))
+            Scatter_pos_data.append(np.array(scene.receivers[f"Rx-{Rx_id}"].position).reshape(1,3))
             amp_data.append(complex_a[Rx_id,:,Tx_id,:,LoS_path])
-            print(complex_a[Rx_id,:,Tx_id,:,LoS_path])
-        valid_paths = significant_paths & reflection_paths
-
-        if np.sum(valid_paths)==0:
-            continue
-        #print("valid paths: ", valid_paths)
-        Scatter_pos = vertices[0,Rx_id,Tx_id,valid_paths,:] #(N, 3)
-        print("Scatter_pos: ", Scatter_pos)
-        Tx_data.append(np.array(scene.transmitters["Tx"].position))
-        Rx_data.append(np.array(scene.receivers[f"Rx-{Rx_id}"].position))
-        CSI_data.append(CSI[:,Rx_id,...])
-        Scatter_pos_data.extend(Scatter_pos)
-        print(f"Rx-{Rx_id} position: ", len(Scatter_pos))
-        amp_data.extend(complex_a[Rx_id,:,Tx_id,:,valid_paths])
-        print("amp_data: ", complex_a[Rx_id,:,Tx_id,0,valid_paths])
+            valid_paths = significant_paths & reflection_paths
+            Scatter_pos = vertices[0,Rx_id,Tx_id,valid_paths,:] #(N, 3)
+            Tx_data.append(np.array(scene.transmitters["Tx"].position))
+            Rx_data.append(np.array(scene.receivers[f"Rx-{Rx_id}"].position))
+            CSI_data.append(CSI[:,Rx_id,...])
+            Scatter_pos_data[len(Scatter_pos_data)-1]=np.append(Scatter_pos_data[len(Scatter_pos_data)-1],Scatter_pos,axis=0)
+            amp_data[len(amp_data)-1]=np.append(amp_data[len(amp_data)-1],complex_a[Rx_id,:,Tx_id,:,valid_paths],axis=0)
+        else:
+            valid_paths = significant_paths & reflection_paths
+            if np.sum(valid_paths)==0:
+                continue
+            Scatter_pos = vertices[0,Rx_id,Tx_id,valid_paths,:] #(N, 3)
+            Tx_data.append(np.array(scene.transmitters["Tx"].position))
+            Rx_data.append(np.array(scene.receivers[f"Rx-{Rx_id}"].position))
+            CSI_data.append(CSI[:,Rx_id,...])
+            Scatter_pos_data.append(Scatter_pos)
+            amp_data.append(complex_a[Rx_id,:,Tx_id,:,valid_paths])
+        print("Rx-",Rx_id," num valid scatterers:",np.sum(valid_paths))
     return CSI_data,Scatter_pos_data,Tx_data,Rx_data,amp_data
 
 def gen_CSI_matrix_and_scatter_position_matrix(config):
@@ -261,8 +264,6 @@ def gen_CSI_matrix_and_scatter_position_matrix(config):
     
     h_freq=paths_diff.cfr(frequencies=frequencies, normalize=True, out_type="numpy")
     print("h_freq shape:", h_freq.shape)
-    # taps_diff = paths_diff.taps(bandwidth, l_min=0, l_max=63, normalize=True, out_type="numpy")
-    # taps_diff = np.squeeze(taps_diff)
     h_freq =np.reshape(h_freq,(h_freq.shape[0],Tx_setting["num_rows"]*Tx_setting["num_cols"],h_freq.shape[-1])) #(Rx_num, num_row, num_col num_subcarrier)
 
     # CSI = np.fft.fft(taps_diff, axis=-1)

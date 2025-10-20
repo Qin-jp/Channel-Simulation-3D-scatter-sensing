@@ -1,5 +1,37 @@
 import numpy as np
-from ChannelDataGen import AntennaFreq2AngleDelay
+
+def AntennaFreq2AngleDelay(CSI, num_rows=4, num_cols=4):
+    """
+    Convert CSI from antenna-frequency domain to angle-delay domain.
+
+    Args:
+        CSI: np.ndarray, shape (n, 16, 64), complex64
+        num_rows: number of antenna rows (default 4)
+        num_cols: number of antenna columns (default 4)
+
+    Returns:
+        CSI_angle_delay: np.ndarray, shape (n, num_rows, num_cols, 64), complex64
+    """
+    #print(CSI.shape)
+    n, num_subcarriers, __  = CSI.shape
+    #assert num_ant == num_rows * num_cols, "Antenna number mismatch!"
+
+    CSI_angle_delay = np.zeros((n, num_subcarriers, num_rows, num_cols), dtype=np.complex64)
+
+    for i in range(n):
+        # reshape antenna dimension into 2D array (rows x cols)
+        H_space_freq = CSI[i].reshape(num_subcarriers, num_rows, num_cols)
+
+        # 2D FFT over antenna array (spatial → angular domain)
+        H_angle_freq = np.fft.fft2(H_space_freq, axes=(1, 2))
+
+        # 1D IFFT over frequency domain (frequency → delay domain)
+        H_angle_delay = np.fft.ifft(H_angle_freq, axis=0)
+
+        CSI_angle_delay[i] = H_angle_delay
+
+    return CSI_angle_delay
+
 def compute_AoD(tx_pos, scatter_pos, tx_angle):
     """Compute the Angle of Departure (AoD) from the transmitter to the scatterer.
     Args:
@@ -9,7 +41,6 @@ def compute_AoD(tx_pos, scatter_pos, tx_angle):
     Returns:
         tuple: A tuple containing the elevation angle (theta) and azimuth angle (phi) in radians.
     """
-    
     tx_theta=tx_angle[1]
     tx_phi=tx_angle[0]
     v=scatter_pos-tx_pos
@@ -35,11 +66,12 @@ def compute_CSI_from_one_path(Tx_ant_rows,
     f_0=carrier_frequency - bandwidth/2
     delta_f=bandwidth/num_subcarriers
     a_T_theta=np.array([np.exp(-1j*2*np.pi*ii*d_row*np.cos(theta)/center_lambda) for ii in range(Tx_ant_rows)])
-    a_T_phi=np.array([np.exp(-1j*2*np.pi*jj*d_col*np.cos(phi)/center_lambda) for jj in range(Tx_ant_cols)])
+    a_T_phi=np.array([np.exp(-1j*2*np.pi*jj*d_col*np.sin(phi)/center_lambda) for jj in range(Tx_ant_cols)])
     a_T=np.outer(a_T_theta,a_T_phi)  #(Tx_ant_rows,Tx_ant_cols)
     delay_vector=[np.exp(-1j*2*np.pi*(f_0+nc*delta_f)*tau) for nc in range(num_subcarriers)]
+    amplitude=np.reshape(amplitude,(Tx_ant_rows,Tx_ant_cols))  #scalar
     h=[delay_vector[i]*amplitude*a_T for i in range(len(delay_vector))]  #(Tx_ant_rows,Tx_ant_cols,num_subcarriers)
-    return np.reshape(h,(Tx_ant_rows*Tx_ant_cols,num_subcarriers))
+    return np.reshape(h,(num_subcarriers, Tx_ant_rows*Tx_ant_cols))
 
 
 def reconstruct_CSI_from_scatterers_and_amplitudes(Tx_position,
@@ -69,18 +101,18 @@ def reconstruct_CSI_from_scatterers_and_amplitudes(Tx_position,
         speed_of_light (float): The speed of light in m/s. Default is 3e8 m/s.
 
     Returns:
-        np.ndarray: The reconstructed CSI matrix of shape (2, num_rows, num_cols, num_subcarriers).
+        np.ndarray: The reconstructed CSI matrix of shape (2, num_subcarriers, num_rows, num_cols, ).
     """
-    print(scatter_positions.shape)
-    print(amplitudes.shape)
-    h=np.zeros((Tx_ant_rows*Tx_ant_cols,num_subcarriers), dtype=np.complex64)
+    #print(scatter_positions.shape)
+    #print(amplitudes.shape)
+    h=np.zeros((num_subcarriers, Tx_ant_rows*Tx_ant_cols), dtype=np.complex64)
     for scatter_id in range(len(scatter_positions)):
         scatter_pos = scatter_positions[scatter_id]
         amplitude = amplitudes[scatter_id,0]
         tau=taus[scatter_id]
         tx_angle = Tx_orientation
         theta, phi = compute_AoD(np.squeeze(Tx_position),np.squeeze(scatter_pos), np.squeeze(tx_angle))
-        print("Scatterer",scatter_id,"theta:",theta,"phi:",phi,"amplitude:",amplitude,"tau:",tau)
+        #print("Scatterer",scatter_id,"theta:",theta,"phi:",phi,"amplitude:",amplitude.shape,"tau:",tau.shape)
         h+=compute_CSI_from_one_path(Tx_ant_rows,
                                      Tx_ant_cols,
                                      num_subcarriers,
@@ -152,12 +184,13 @@ if __name__ == "__main__":
     Rx_positions=data.item().get("Rx_positions")
     Tx_orientations=data.item().get("Tx_orientations")
     amplitude=data.item().get("amplitudes")
-    
 
-
-    taus=[(np.linalg.norm(Tx_positions[i]-scatter_positions[i][j])
-         +np.linalg.norm(Rx_positions[i]-scatter_positions[i][j])
-         -np.linalg.norm(Tx_positions[i]-Rx_positions[i]))/3e8 for i in range(len(CSI)) for j in range(len(scatter_positions[i])) ]
+    taus=[np.zeros(len(scatter_positions[i])) for i in range(len(scatter_positions))]
+    for i in range(len(Tx_positions)):
+        for j in range(len(scatter_positions[i])):
+            taus[i][j]=(np.linalg.norm(np.reshape(Tx_positions[i],(3,)) - scatter_positions[i][j])
+                        + np.linalg.norm(np.reshape(Rx_positions[i],(3,)) - scatter_positions[i][j])
+                        - np.linalg.norm(Tx_positions[i] - Rx_positions[i])) / 3e8
 
     TestCSI=[]
     for i in range(8):
@@ -171,7 +204,7 @@ if __name__ == "__main__":
                                                     carrier_frequency=3e9,
                                                     bandwidth=100e6,
                                                     speed_of_light=3e8,
-                                                    taus=taus))
+                                                    taus=taus[i]))
     save_results={"CSI":TestCSI}
-    np.save("/home/jingpeng/graduation_project/Channel_Simulation/debug_file/test_reconstructed_CSI.npy", save_results)
+    #np.save("/home/jingpeng/graduation_project/Channel_Simulation/debug_file/test_reconstructed_CSI.npy", save_results)
     #locate_scatterers_in_CSI(CSI, scatter_positions, Tx_positions, Rx_positions, Tx_orientations)
