@@ -63,13 +63,19 @@ def main(config_folder, output_path):
             print(f"❌ Fail to read or simulate {filename} : {e}")
 
     # 保存结果
-    save_results={"CSI":[], "scatter_positions":[],"Tx_positions":[],"Rx_positions":[],"Tx_orientations":[]}
+    save_results={"CSI":[],
+                 "scatter_positions":[],
+                 "Tx_positions":[],
+                 "Rx_positions":[],
+                 "Tx_orientations":[],
+                 "amplitudes":[]}
     for res in all_results:
         save_results["CSI"].extend(res["CSI"])
         save_results["scatter_positions"].extend(res["scatter_positions"])
         save_results["Tx_positions"].extend(res["Tx_positions"])
         save_results["Rx_positions"].extend(res["Rx_positions"])
         save_results["Tx_orientations"].extend(res["Tx_orientations"])
+        save_results["amplitudes"].extend(res["amp_data"])
     print(f"\nTotal samples: {len(save_results['CSI'])}")
     # print(f"Sample CSI shape: {np.array(save_results['CSI']).shape}")
     # print(f"Sample scatter_positions shape: {len(save_results['scatter_positions'])}")
@@ -87,7 +93,7 @@ if __name__ == "__main__":
     random.seed(SEED)
     tf.random.set_seed(SEED)
     config_folder = "./configs"         
-    output_path = "./dataset/sim_results20251017.npy"  # save path
+    output_path = "./dataset/sim_results20251020.npy"  # save path
     main(config_folder, output_path)
 
 

@@ -182,10 +182,17 @@ def get_scatter_pos_and_attached_data(paths_obj,CSI,scene):
     Tx_id=0
     for Rx_id in range(interactions.shape[1]):
         max_mag = np.max(np.sum(np.abs(complex_a[Rx_id,0,Tx_id,:,:]),axis=-2))
-        mag_threshold = max_mag * 0.1  # 10% of the maximum magnitude
+        mag_threshold = max_mag * 0.0  # 10% of the maximum magnitude
         significant_paths = np.sum(np.abs(complex_a[Rx_id,0,Tx_id,:,:]),axis=-2)> mag_threshold    
         reflection_paths=[x or y for x,y in zip(interactions[0,Rx_id,Tx_id,:]==1, interactions[0,Rx_id,Tx_id,:]==2)]
+        
+        LoS_path = [x and y for x,y in zip(interactions[0,Rx_id,Tx_id,:]==0 , significant_paths)]
+        if np.sum(LoS_path)>0:
+            Scatter_pos_data.append(np.array(scene.transmitters["Tx"].position).reshape(1,3))
+            amp_data.append(complex_a[Rx_id,:,Tx_id,:,LoS_path])
+            print(complex_a[Rx_id,:,Tx_id,:,LoS_path])
         valid_paths = significant_paths & reflection_paths
+
         if np.sum(valid_paths)==0:
             continue
         #print("valid paths: ", valid_paths)
@@ -194,9 +201,9 @@ def get_scatter_pos_and_attached_data(paths_obj,CSI,scene):
         Tx_data.append(np.array(scene.transmitters["Tx"].position))
         Rx_data.append(np.array(scene.receivers[f"Rx-{Rx_id}"].position))
         CSI_data.append(CSI[:,Rx_id,...])
-        Scatter_pos_data.append(Scatter_pos)
+        Scatter_pos_data.extend(Scatter_pos)
         print(f"Rx-{Rx_id} position: ", len(Scatter_pos))
-        amp_data.append(complex_a[Rx_id,:,Tx_id,:,valid_paths])
+        amp_data.extend(complex_a[Rx_id,:,Tx_id,:,valid_paths])
         print("amp_data: ", complex_a[Rx_id,:,Tx_id,0,valid_paths])
     return CSI_data,Scatter_pos_data,Tx_data,Rx_data,amp_data
 
