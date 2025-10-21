@@ -2,8 +2,8 @@
     "Tx_setting": {
         "num_rows": 16,
         "num_cols": 16,
-        "vertical_spacing": 0.5,
-        "horizontal_spacing": 0.5,
+        "vertical_spacing": 0.05,
+        "horizontal_spacing": 0.05,
         "antenna pattern": "tr38901",
         "polarization": "V",
         "position":[-100,-150,32],
@@ -12,8 +12,8 @@
     "Rx_setting": {
         "num_rows": 1,
         "num_cols": 1,
-        "vertical_spacing": 0.5,
-        "horizontal_spacing": 0.5,
+        "vertical_spacing": 0.05,
+        "horizontal_spacing": 0.05,
         "antenna pattern": "tr38901",
         "polarization": "V",
         "orientation":[0,0,0],

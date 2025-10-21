@@ -162,7 +162,7 @@ def AntennaFreq2AngleDelay(CSI, num_rows=4, num_cols=4):
 
     return CSI_angle_delay
 
-def get_scatter_pos_and_attached_data(paths_obj,CSI,scene):
+def get_scatter_pos_and_attached_data(paths_obj,CSI,scene,save_path_without_LoS=False):
     """
     Extract scatterer positions and associated data from paths object and CSI.
 
@@ -198,6 +198,8 @@ def get_scatter_pos_and_attached_data(paths_obj,CSI,scene):
             Scatter_pos_data[len(Scatter_pos_data)-1]=np.append(Scatter_pos_data[len(Scatter_pos_data)-1],Scatter_pos,axis=0)
             amp_data[len(amp_data)-1]=np.append(amp_data[len(amp_data)-1],complex_a[Rx_id,:,Tx_id,:,valid_paths],axis=0)
         else:
+            if save_path_without_LoS == False:
+                continue
             valid_paths = significant_paths & reflection_paths
             if np.sum(valid_paths)==0:
                 continue

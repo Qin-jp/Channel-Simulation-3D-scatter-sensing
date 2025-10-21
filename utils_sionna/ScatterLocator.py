@@ -55,22 +55,13 @@ def compute_CSI_from_one_path(Tx_ant_rows,
                               num_subcarriers,
                               carrier_frequency,
                               bandwidth,
-                              speed_of_light,
-                              theta,
-                              phi,
                               amplitude,
                               tau):                              
-    center_lambda=speed_of_light/carrier_frequency
-    d_row=0.5*center_lambda
-    d_col=0.5*center_lambda
     f_0=carrier_frequency - bandwidth/2
     delta_f=bandwidth/num_subcarriers
-    a_T_theta=np.array([np.exp(-1j*2*np.pi*ii*d_row*np.cos(theta)/center_lambda) for ii in range(Tx_ant_rows)])
-    a_T_phi=np.array([np.exp(-1j*2*np.pi*jj*d_col*np.sin(phi)/center_lambda) for jj in range(Tx_ant_cols)])
-    a_T=np.outer(a_T_theta,a_T_phi)  #(Tx_ant_rows,Tx_ant_cols)
     delay_vector=[np.exp(-1j*2*np.pi*(f_0+nc*delta_f)*tau) for nc in range(num_subcarriers)]
-    amplitude=np.reshape(amplitude,(Tx_ant_rows,Tx_ant_cols))  #scalar
-    h=[delay_vector[i]*amplitude*a_T for i in range(len(delay_vector))]  #(Tx_ant_rows,Tx_ant_cols,num_subcarriers)
+    amplitude=(np.reshape(amplitude,(Tx_ant_rows,Tx_ant_cols)))
+    h=[delay_vector[i]*amplitude for i in range(len(delay_vector))]
     return np.reshape(h,(num_subcarriers, Tx_ant_rows*Tx_ant_cols))
 
 
@@ -107,20 +98,16 @@ def reconstruct_CSI_from_scatterers_and_amplitudes(Tx_position,
     #print(amplitudes.shape)
     h=np.zeros((num_subcarriers, Tx_ant_rows*Tx_ant_cols), dtype=np.complex64)
     for scatter_id in range(len(scatter_positions)):
-        scatter_pos = scatter_positions[scatter_id]
+        #scatter_pos = scatter_positions[scatter_id]
         amplitude = amplitudes[scatter_id,0]
         tau=taus[scatter_id]
-        tx_angle = Tx_orientation
-        theta, phi = compute_AoD(np.squeeze(Tx_position),np.squeeze(scatter_pos), np.squeeze(tx_angle))
-        #print("Scatterer",scatter_id,"theta:",theta,"phi:",phi,"amplitude:",amplitude.shape,"tau:",tau.shape)
+        #tx_angle = Tx_orientation
+        #theta, phi = compute_AoD(np.squeeze(Tx_position),np.squeeze(scatter_pos), np.squeeze(tx_angle))
         h+=compute_CSI_from_one_path(Tx_ant_rows,
                                      Tx_ant_cols,
                                      num_subcarriers,
                                      carrier_frequency,
                                      bandwidth,
-                                     speed_of_light,
-                                     theta,
-                                     phi,
                                      amplitude,
                                      tau)
 

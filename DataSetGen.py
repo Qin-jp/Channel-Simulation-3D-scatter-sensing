@@ -90,7 +90,7 @@ if __name__ == "__main__":
     random.seed(SEED)
     tf.random.set_seed(SEED)
     config_folder = "./configs"         
-    output_path = "./dataset/sim_results20251020.npy"  # save path
+    output_path = "./dataset/sim_results20251021.npy"  # save path
     main(config_folder, output_path)
 
 
