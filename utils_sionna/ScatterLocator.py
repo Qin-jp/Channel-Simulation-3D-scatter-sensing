@@ -115,6 +115,53 @@ def reconstruct_CSI_from_scatterers_and_amplitudes(Tx_position,
     CSI = AntennaFreq2AngleDelay(CSI, num_rows=Tx_ant_rows, num_cols=Tx_ant_cols)
     return CSI
 
+
+def light_spot_index2theta_phi_tau(index,num_row,num_col,delta_f,num_subcarrier):
+    row_index=index[0]
+    col_index=index[1]
+    tau_index=index[2]
+    if col_index<num_col/2:
+        cos_theta=col_index/(num_col/2)
+        theta=np.arccos(cos_theta)
+    else:
+        cos_theta=(col_index-num_col)/(num_col/2)
+        theta=np.arccos(cos_theta)
+
+    if row_index<num_row/2:
+        sin_phi=row_index/(num_row/2)/np.sin(theta)
+        phi=np.arcsin(sin_phi)
+    else:
+        sin_phi=(row_index-num_row)/(num_row/2)/np.sin(theta)
+        phi=np.arcsin(sin_phi)
+    tau=tau_index/(delta_f*num_subcarrier)
+    return theta,phi,tau
+
+def theta_phi_tau2light_spot_index(theta,phi,tau,num_row,num_col,delta_f,num_subcarrier):
+    index=np.zeros((3,1))
+    if np.cos(theta)<0:
+        index[1]=(1+np.cos(theta)/2)*num_col
+    else:
+        index[1]=np.cos(theta)/2*num_col
+    if np.sin(phi)<0:
+        index[0]=(1+np.sin(theta)*np.sin(phi)/2)*num_row
+    else:
+        index[0]=np.sin(theta)*np.sin(phi)/2*num_row
+    index[2]=delta_f*tau*num_subcarrier
+    return index
+
+def theta_phi_tau2scatterer_pos(Tx_pos,Rx_pos,theta,phi,tau):
+    Tx_pos=np.squeeze(Tx_pos)
+    Rx_pos=np.squeeze(Rx_pos)
+    lightspeed=3e8
+    c=np.linalg.norm(Tx_pos-Rx_pos)/2
+    a=(tau*lightspeed+2*c)/2
+    scatter_direction_vecter=np.array([np.sin(theta)*np.cos(phi),np.sin(theta)*np.sin(phi),np.cos(theta)])
+    Rx_Tx_direction_vecter=(Rx_pos-Tx_pos)/2/c
+    cos_alpha=np.dot(scatter_direction_vecter,Rx_Tx_direction_vecter)
+    e=c/a
+    length=(a*(1-e*e))/(1-e*cos_alpha)
+    return Tx_pos+length*scatter_direction_vecter
+
 def locate_scatterers_in_CSI(CSI, scatter_positions, Tx_positions, Rx_positions, Tx_orientations):
     """Locate the scatterers in the 3D CSI matrix.
 
