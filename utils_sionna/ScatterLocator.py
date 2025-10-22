@@ -44,8 +44,8 @@ def compute_AoD(tx_pos, scatter_pos, tx_angle):
     tx_theta=tx_angle[1]
     tx_phi=tx_angle[0]
     v=scatter_pos-tx_pos
-    v_theta=np.arccos(v[2]/np.linalg.norm(v))#?????
-    v_phi=np.arctan2(v[1],v[0])#?????
+    v_theta=np.arccos(v[2]/np.linalg.norm(v))
+    v_phi=np.arctan2(v[1],v[0])
     theta=v_theta-tx_theta
     phi=v_phi-tx_phi    
     return theta, phi
@@ -94,15 +94,10 @@ def reconstruct_CSI_from_scatterers_and_amplitudes(Tx_position,
     Returns:
         np.ndarray: The reconstructed CSI matrix of shape (2, num_subcarriers, num_rows, num_cols, ).
     """
-    #print(scatter_positions.shape)
-    #print(amplitudes.shape)
     h=np.zeros((num_subcarriers, Tx_ant_rows*Tx_ant_cols), dtype=np.complex64)
     for scatter_id in range(len(scatter_positions)):
-        #scatter_pos = scatter_positions[scatter_id]
         amplitude = amplitudes[scatter_id,0]
         tau=taus[scatter_id]
-        #tx_angle = Tx_orientation
-        #theta, phi = compute_AoD(np.squeeze(Tx_position),np.squeeze(scatter_pos), np.squeeze(tx_angle))
         h+=compute_CSI_from_one_path(Tx_ant_rows,
                                      Tx_ant_cols,
                                      num_subcarriers,
@@ -117,6 +112,26 @@ def reconstruct_CSI_from_scatterers_and_amplitudes(Tx_position,
 
 
 def light_spot_index2theta_phi_tau(index,num_row,num_col,delta_f,num_subcarrier):
+    """Convert a 3D light spot index into angular and delay domain parameters.
+
+    This function maps a discrete 3D index (row, column, delay) from a light spot 
+    or antenna array representation into its corresponding physical parameters:
+    elevation angle (theta), azimuth angle (phi), and path delay (tau).
+
+    Args:
+        index (tuple or list of int): A 3-element index (row_index, col_index, tau_index)
+            representing the position in the angular-delay grid.
+        num_row (int): The number of rows in the grid (corresponding to the azimuth dimension).
+        num_col (int): The number of columns in the grid (corresponding to the elevation dimension).
+        delta_f (float): The subcarrier spacing in Hz.
+        num_subcarrier (int): The total number of subcarriers used in the frequency domain.
+
+    Returns:
+        tuple:
+            - theta (float): Polar angle in radians, derived from the column index.
+            - phi (float): Azimuth angle in radians, derived from the row index.
+            - tau (float): Propagation delay in seconds, derived from the delay index.
+    """
     row_index=index[0]
     col_index=index[1]
     tau_index=index[2]
@@ -137,7 +152,34 @@ def light_spot_index2theta_phi_tau(index,num_row,num_col,delta_f,num_subcarrier)
     return theta,phi,tau
 
 def theta_phi_tau2light_spot_index(theta,phi,tau,num_row,num_col,delta_f,num_subcarrier):
-    index=np.zeros((3,1))
+    """Map the incident path parameters (theta, phi, tau) to their corresponding indices 
+    in the CSI light spot representation.
+
+    Args:
+        theta (float): The polar angle in the spherical coordinate system, measured from 
+            the +z axis downward, in the range [0, π].  
+            (Note: If using elevation angle, convert via θ = π/2 - elevation.)
+        phi (float): The azimuth angle in the xy-plane, measured counterclockwise 
+            from the +x axis toward the +y axis, in the range [-π, π].
+        tau (float): Path propagation delay in seconds, determining the frequency-domain shift in CSI.
+        num_row (int): Number of rows in the CSI (vertical spatial dimension of the array).
+        num_col (int): Number of columns in the CSI (horizontal spatial dimension of the array).
+        delta_f (float): Subcarrier spacing in Hz.
+        num_subcarrier (int): Number of subcarriers used for normalization in the delay dimension.
+
+    Returns:
+        np.ndarray: A 3-element array representing the [row_index, col_index, depth_index], where:
+            - index[0]: Vertical index, derived from sin(theta) * sin(phi)
+            - index[1]: Horizontal index, derived from cos(theta)
+            - index[2]: Frequency/delay index, derived from tau
+
+    Notes:
+        - The horizontal (column) mapping uses cos(theta) to distinguish directions above or below the z-axis.
+        - The vertical (row) mapping uses sin(theta)*sin(phi) to represent elevation and azimuth jointly.
+        - The delay index is computed as delta_f * tau * num_subcarrier, corresponding to its 
+          relative location in the frequency-domain CSI representation.
+    """
+    index=np.zeros((3,))
     if np.cos(theta)<0:
         index[1]=(1+np.cos(theta)/2)*num_col
     else:
@@ -150,6 +192,29 @@ def theta_phi_tau2light_spot_index(theta,phi,tau,num_row,num_col,delta_f,num_sub
     return index
 
 def theta_phi_tau2scatterer_pos(Tx_pos,Rx_pos,theta,phi,tau):
+    """Compute the 3D position of a scatterer based on geometric parameters derived 
+    from CSI, assuming the scatterer lies on an ellipsoid formed by constant path delay.
+
+    Args:
+        Tx_pos (np.ndarray): The 3D position of the transmitter, shape (3,).
+        Rx_pos (np.ndarray): The 3D position of the receiver, shape (3,).
+        theta (float): Polar angle (measured from +z axis) in spherical coordinates, in radians.
+        phi (float): Azimuth angle (measured counterclockwise from +x axis in the xy-plane), in radians.
+        tau (float): Path delay in seconds, representing the total propagation time from Tx to Rx via the scatterer.
+
+    Returns:
+        np.ndarray: The estimated 3D position of the scatterer, shape (3,).
+
+    Notes:
+        - The locus of all possible scatterer positions corresponding to a given delay τ 
+          is an ellipsoid with the Tx and Rx as its two foci.
+        - The semi-major axis `a` of the ellipsoid is determined from the total path length
+          `a = (c * τ + 2 * c0) / 2`, where `c0` is half the Tx–Rx distance.
+        - The eccentricity `e = c0 / a` characterizes how elongated the ellipsoid is.
+        - The intersection point between the ellipsoid and the ray defined by (θ, φ)
+          from the transmitter gives the scatterer position.
+
+    """
     Tx_pos=np.squeeze(Tx_pos)
     Rx_pos=np.squeeze(Rx_pos)
     lightspeed=3e8
@@ -162,52 +227,48 @@ def theta_phi_tau2scatterer_pos(Tx_pos,Rx_pos,theta,phi,tau):
     length=(a*(1-e*e))/(1-e*cos_alpha)
     return Tx_pos+length*scatter_direction_vecter
 
-def locate_scatterers_in_CSI(CSI, scatter_positions, Tx_positions, Rx_positions, Tx_orientations):
-    """Locate the scatterers in the 3D CSI matrix.
+def locate_scatterers_in_CSI(light_spot_indices, Tx_positions, Rx_positions, Tx_orientations, num_row,num_col,delta_f,num_subcarrier):
+    """Estimate the 3D positions of scatterers from CSI light spot indices.
 
     Args:
-        CSI (np.ndarray): The CSI matrix of shape (num_samples, 2, Tx_ant_row, Tx_ant_col, num_subcarriers).
-        scatter_positions (np.ndarray): The scatterer positions of shape (num_samples, num_scatterers, 3).
-        Tx_positions (np.ndarray): The transmitter positions of shape (num_samples, 3).
-        Rx_positions (np.ndarray): The receiver positions of shape (num_samples, 3).
-        scene (object): The scene object containing the environment information.
+        light_spot_indices (list[np.ndarray]): A list of light spot index arrays for each Tx–Rx pair.
+            Each array has shape (num_scatterers, 3), where each row represents 
+            [row_index, col_index, delay_index].
+        Tx_positions (np.ndarray): The 3D positions of transmitters, shape (num_pairs, 3).
+        Rx_positions (np.ndarray): The 3D positions of receivers, shape (num_pairs, 3).
+        Tx_orientations (np.ndarray): The orientations of transmitters in Sionna form, shape (num_pairs, 3).
+        num_row (int): Number of vertical grid points in the light spot map.
+        num_col (int): Number of horizontal grid points in the light spot map.
+        delta_f (float): Subcarrier spacing in Hz.
+        num_subcarrier (int): Total number of subcarriers.
+
     Returns:
-        dict: A dictionary containing the located scatterers and their corresponding paths.
-    """
-    for id in range(len(CSI)):
-        #csi_sample = CSI[id]
-        scatter_pos_sample = scatter_positions[id]
+        list[np.ndarray]: A list containing the estimated scatterer positions for each Tx–Rx pair.
+            Each element has shape (num_scatterers, 3), representing 3D scatterer coordinates.
+
+    Notes:
+        - This function converts light spot indices (representations of θ, φ, τ in CSI space)
+          into actual scatterer coordinates in 3D space.
+        - The conversion process includes two main steps:
+            1. Mapping the grid indices to physical parameters (θ, φ, τ).
+            2. Converting (θ, φ, τ) to Cartesian scatterer coordinates using geometric constraints.
+        - The resulting positions correspond to points on ellipsoids defined by the given Tx–Rx pair.
+    """   
+    scatterer_positions=[]
+    for id in range(len(light_spot_indices)):
+
+        light_spot_index=light_spot_indices[id]
         tx_pos = Tx_positions[id]
         rx_pos = Rx_positions[id]
-        num_scatterers = scatter_pos_sample.shape[0]
-
+        num_scatterers = light_spot_index.shape[0]
+        scatterer_positions.append(np.zeros((num_scatterers,3)))
         # Compute the distances and angles for each scatterer
         for i in range(num_scatterers):
-            scatter_pos = scatter_pos_sample[i]
-            # d_tx_scatter = np.linalg.norm(scatter_pos - tx_pos)
-            # d_scatter_rx = np.linalg.norm(rx_pos - scatter_pos)
-            # total_distance = d_tx_scatter + d_scatter_rx
-
-            # Compute angles
-            tx_angle = Tx_orientations[id] # Assuming scene has a method to get Tx orientation
-            theta, phi = compute_AoD(np.squeeze(tx_pos),np.squeeze(scatter_pos), np.squeeze(tx_angle))
-            print("theta:",theta,"phi:",phi)
-
-            # Here you would map the distance and angles to the CSI matrix indices
-            # This part is highly dependent on how your CSI matrix is structured
-            # and how distances/angles correspond to indices.
-
-            # For demonstration, let's assume we have a function that does this mapping:
-            # row_idx, col_idx, subcarrier_idx = map_to_csi_indices(total_distance, theta, phi, csi_sample.shape)
-
-            # Now you can locate the scatterer in the CSI matrix
-            # amplitude = np.abs(csi_sample[0, row_idx, col_idx, subcarrier_idx])
-            # phase = np.angle(csi_sample[1, row_idx, col_idx, subcarrier_idx])
-
-            # Store or print the located scatterer information
-            # print(f"Scatterer {i}: Distance={total_distance}, Theta={theta}, Phi={phi}, Amplitude={amplitude}, Phase={phase}")
-
-
+            index=light_spot_index[i]
+            theta,phi,tau=light_spot_index2theta_phi_tau(index,num_row,num_col,delta_f,num_subcarrier)
+            scatterer_pos=theta_phi_tau2scatterer_pos(tx_pos,rx_pos,theta,phi,tau)
+            scatter_positions[id][i]=scatterer_pos
+    return scatter_positions
 
 if __name__ == "__main__":
     data=np.load("/home/jingpeng/graduation_project/Channel_Simulation/dataset/sim_results20251020.npy", allow_pickle=True)
