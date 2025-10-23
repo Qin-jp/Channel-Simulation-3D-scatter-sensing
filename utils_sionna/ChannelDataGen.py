@@ -260,7 +260,7 @@ def gen_CSI_matrix_and_scatter_position_matrix(config):
 # Paths with diffuse reflections
     paths_diff = p_solver(scene,
                  max_depth=1,
-                 samples_per_src=10**4,
+                 samples_per_src=10**3,
                  diffuse_reflection=True,
                  refraction=False,
                  synthetic_array=True)   

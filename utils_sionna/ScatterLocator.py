@@ -317,7 +317,7 @@ def locate_scatterers_in_CSI(scatterer_positions, Tx_positions, Rx_positions, Tx
 
 
 if __name__ == "__main__":
-    data=np.load("/home/jingpeng/graduation_project/Channel_Simulation/dataset/sim_results20251021.npy", allow_pickle=True)
+    data=np.load("/home/jingpeng/graduation_project/Channel_Simulation/dataset/sim_results20251023.npy", allow_pickle=True)
     print(data.item().keys())
     CSI=data.item().get("CSI")
     scatter_positions=data.item().get("scatter_positions")
