@@ -1,4 +1,5 @@
 from utils_sionna.ChannelDataGen import gen_CSI_matrix_and_scatter_position_matrix
+from utils_sionna.ScatterLocator import locate_scatterers_in_CSI
 import numpy as np
 import os
 import json
@@ -6,6 +7,7 @@ import time
 import random
 import yaml
 import re
+import drjit as dr
 
 def is_config_empty(config_data):
     return not bool(config_data)
@@ -52,6 +54,7 @@ def main(config_folder, output_path):
             while True:              
                 print(f"✅ Simulating: {filename}")
                 result = gen_CSI_matrix_and_scatter_position_matrix(config)
+                #dr.thr
                 num_data += len(result["CSI"])
                 print(f"   Current total samples: {num_data}\n")
                 all_results.append(result)
@@ -68,7 +71,8 @@ def main(config_folder, output_path):
                  "Tx_positions":[],
                  "Rx_positions":[],
                  "Tx_orientations":[],
-                 "amplitudes":[]}
+                 "amplitudes":[],
+                 "scatterer_indices":[]}
     for res in all_results:
         save_results["CSI"].extend(res["CSI"])
         save_results["scatter_positions"].extend(res["scatter_positions"])
@@ -76,6 +80,17 @@ def main(config_folder, output_path):
         save_results["Rx_positions"].extend(res["Rx_positions"])
         save_results["Tx_orientations"].extend(res["Tx_orientations"])
         save_results["amplitudes"].extend(res["amp_data"])
+
+
+    scatterer_indices=locate_scatterers_in_CSI(save_results["scatter_positions"],
+                                               save_results["Tx_positions"],
+                                               save_results["Rx_positions"],
+                                               save_results["Tx_orientations"],
+                                               config['Tx_setting']["num_rows"],
+                                               config["Tx_setting"]["num_cols"],
+                                               config["Rx_setting"]["bandwidth"]/config["Rx_setting"]["num_subcarrier"],
+                                               config["Rx_setting"]["num_subcarrier"])
+    save_results["scatterer_indices"]=scatterer_indices
     print(f"\nTotal samples: {len(save_results['CSI'])}")
     np.save(output_path, save_results)
     print(f"\n✅ All completed, save to {output_path}")
@@ -90,7 +105,7 @@ if __name__ == "__main__":
     random.seed(SEED)
     tf.random.set_seed(SEED)
     config_folder = "./configs"         
-    output_path = "./dataset/sim_results20251021.npy"  # save path
+    output_path = "./dataset/sim_results20251023.npy"  # save path
     main(config_folder, output_path)
 
 

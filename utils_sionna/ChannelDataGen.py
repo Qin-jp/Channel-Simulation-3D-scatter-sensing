@@ -182,7 +182,7 @@ def get_scatter_pos_and_attached_data(paths_obj,CSI,scene,save_path_without_LoS=
     Tx_id=0
     for Rx_id in range(interactions.shape[1]):
         max_mag = np.max(np.sum(np.abs(complex_a[Rx_id,0,Tx_id,:,:]),axis=-2))
-        mag_threshold = max_mag * 0.1  # 5% of the maximum magnitude
+        mag_threshold = max_mag * 0  # 1% of the maximum magnitude
         significant_paths = np.sum(np.abs(complex_a[Rx_id,0,Tx_id,:,:]),axis=-2)> mag_threshold    
         reflection_paths=[x or y for x,y in zip(interactions[0,Rx_id,Tx_id,:]==1, interactions[0,Rx_id,Tx_id,:]==2)]
         
@@ -282,11 +282,14 @@ def gen_CSI_matrix_and_scatter_position_matrix(config):
 
     CSI,scatter_pos,Tx_pos,Rx_pos,amp_data=get_scatter_pos_and_attached_data(paths_diff,CSI,scene)
 
-
-    return {"CSI":CSI,
+    res = {"CSI":CSI,
             "scatter_positions":scatter_pos,
             "Tx_positions":Tx_pos,
             "Rx_positions":Rx_pos,
             "amp_data":amp_data,
             "Tx_orientations":np.array(np.repeat(scene.transmitters["Tx"].orientation,len(CSI),axis=-1)).reshape(len(CSI),3)}
+
+    del scene
+
+    return res
 

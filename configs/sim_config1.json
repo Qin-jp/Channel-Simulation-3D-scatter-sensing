@@ -1,7 +1,7 @@
 {
     "Tx_setting": {
-        "num_rows": 16,
-        "num_cols": 16,
+        "num_rows": 32,
+        "num_cols": 32,
         "vertical_spacing": 0.5,
         "horizontal_spacing": 0.5,
         "antenna pattern": "tr38901",
@@ -27,6 +27,6 @@
     "cell_size": [0.1, 0.1],    
     "Rx_height_max": 20,
     "sample_radis":100,
-    "num_samples":16,
+    "num_samples":4,
     "total_sim_num":30
 }

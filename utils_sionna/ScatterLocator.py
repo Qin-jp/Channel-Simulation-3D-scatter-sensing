@@ -227,7 +227,7 @@ def theta_phi_tau2scatterer_pos(Tx_pos,Rx_pos,theta,phi,tau):
     length=(a*(1-e*e))/(1-e*cos_alpha)
     return Tx_pos+length*scatter_direction_vecter
 
-def locate_scatterers_in_CSI(light_spot_indices, Tx_positions, Rx_positions, Tx_orientations, num_row,num_col,delta_f,num_subcarrier):
+def locate_scatterers_in_real_world(light_spot_indices, Tx_positions, Rx_positions, Tx_orientations, num_row,num_col,delta_f,num_subcarrier):
     """Estimate the 3D positions of scatterers from CSI light spot indices.
 
     Args:
@@ -270,8 +270,54 @@ def locate_scatterers_in_CSI(light_spot_indices, Tx_positions, Rx_positions, Tx_
             scatter_positions[id][i]=scatterer_pos
     return scatter_positions
 
+def locate_scatterers_in_CSI(scatterer_positions, Tx_positions, Rx_positions, Tx_orientations, num_row,num_col,delta_f,num_subcarrier):
+    """Locate the corresponding CSI light spot indices of given 3D scatterers.
+
+    Args:
+        scatterer_positions (list[np.ndarray]): A list of scatterer position arrays for each Tx–Rx pair.
+            Each array has shape (num_scatterers, 3), where each row represents the 3D coordinates of one scatterer.
+        Tx_positions (np.ndarray): The 3D positions of transmitters, shape (num_pairs, 3).
+        Rx_positions (np.ndarray): The 3D positions of receivers, shape (num_pairs, 3).
+        Tx_orientations (np.ndarray): The orientations of transmitters in Sionna format, shape (num_pairs, 3).
+        num_row (int): Number of vertical grid points in the light spot map.
+        num_col (int): Number of horizontal grid points in the light spot map.
+        delta_f (float): Subcarrier spacing in Hz.
+        num_subcarrier (int): Total number of subcarriers.
+
+    Returns:
+        list[np.ndarray]: A list of index arrays for each Tx–Rx pair.
+            Each array has shape (num_scatterers, 3), where each row represents
+            [row_index, col_index, delay_index] corresponding to one scatterer.
+
+    Notes:
+        - This function performs the inverse operation of scatterer localization: 
+          it maps known 3D scatterer positions back to their corresponding indices 
+          (θ, φ, τ) in the CSI light spot domain.
+        - The process involves two main steps:
+            1. Computing the propagation delay τ of each scatterer based on geometric distances.
+            2. Converting (θ, φ, τ) to discrete grid indices using `theta_phi_tau2light_spot_index`.
+        - The computed indices can be used to highlight or visualize scatterer contributions 
+          in the CSI-derived light spot map.
+    """
+    indices=[]
+    taus=[np.zeros(len(scatterer_positions[i])) for i in range(len(scatterer_positions))]
+    for i in range(len(Tx_positions)):
+        for j in range(len(scatterer_positions[i])):
+            taus[i][j]=(np.linalg.norm(np.reshape(Tx_positions[i],(3,)) - scatterer_positions[i][j])
+                        + np.linalg.norm(np.reshape(Rx_positions[i],(3,)) - scatterer_positions[i][j])
+                        - np.linalg.norm(Tx_positions[i] - Rx_positions[i])) / 3e8
+    for i in range(len(scatterer_positions)):
+        scatterer_pos=scatterer_positions[i]
+        indices.append(np.zeros((len(scatterer_pos),3)))
+        for j in range(len(scatterer_pos)):
+            theta,phi=compute_AoD(np.squeeze(Tx_positions[i]),np.squeeze(scatterer_pos[j]),Tx_orientations[i])
+            index=theta_phi_tau2light_spot_index(theta,phi,taus[i][j],num_row,num_col,delta_f,num_subcarrier)
+            indices[i][j]=index
+    return indices
+
+
 if __name__ == "__main__":
-    data=np.load("/home/jingpeng/graduation_project/Channel_Simulation/dataset/sim_results20251020.npy", allow_pickle=True)
+    data=np.load("/home/jingpeng/graduation_project/Channel_Simulation/dataset/sim_results20251021.npy", allow_pickle=True)
     print(data.item().keys())
     CSI=data.item().get("CSI")
     scatter_positions=data.item().get("scatter_positions")
@@ -280,26 +326,31 @@ if __name__ == "__main__":
     Tx_orientations=data.item().get("Tx_orientations")
     amplitude=data.item().get("amplitudes")
 
-    taus=[np.zeros(len(scatter_positions[i])) for i in range(len(scatter_positions))]
-    for i in range(len(Tx_positions)):
-        for j in range(len(scatter_positions[i])):
-            taus[i][j]=(np.linalg.norm(np.reshape(Tx_positions[i],(3,)) - scatter_positions[i][j])
-                        + np.linalg.norm(np.reshape(Rx_positions[i],(3,)) - scatter_positions[i][j])
-                        - np.linalg.norm(Tx_positions[i] - Rx_positions[i])) / 3e8
 
-    TestCSI=[]
-    for i in range(8):
-        TestCSI.append(reconstruct_CSI_from_scatterers_and_amplitudes(Tx_positions[i],
-                                                    scatter_positions[i],
-                                                    amplitude[i],
-                                                    Tx_orientations[i],
-                                                    num_subcarriers=1024,
-                                                    Tx_ant_rows=16,
-                                                    Tx_ant_cols=16,
-                                                    carrier_frequency=3e9,
-                                                    bandwidth=100e6,
-                                                    speed_of_light=3e8,
-                                                    taus=taus[i]))
-    save_results={"CSI":TestCSI}
+    indices=locate_scatterers_in_CSI(scatter_positions,Tx_positions,Rx_positions,Tx_orientations,16,16,100e6/1024,1024)
+
+    print(indices)
+
+    # taus=[np.zeros(len(scatter_positions[i])) for i in range(len(scatter_positions))]
+    # for i in range(len(Tx_positions)):
+    #     for j in range(len(scatter_positions[i])):
+    #         taus[i][j]=(np.linalg.norm(np.reshape(Tx_positions[i],(3,)) - scatter_positions[i][j])
+    #                     + np.linalg.norm(np.reshape(Rx_positions[i],(3,)) - scatter_positions[i][j])
+    #                     - np.linalg.norm(Tx_positions[i] - Rx_positions[i])) / 3e8
+
+    # TestCSI=[]
+    # for i in range(8):
+    #     TestCSI.append(reconstruct_CSI_from_scatterers_and_amplitudes(Tx_positions[i],
+    #                                                 scatter_positions[i],
+    #                                                 amplitude[i],
+    #                                                 Tx_orientations[i],
+    #                                                 num_subcarriers=1024,
+    #                                                 Tx_ant_rows=16,
+    #                                                 Tx_ant_cols=16,
+    #                                                 carrier_frequency=3e9,
+    #                                                 bandwidth=100e6,
+    #                                                 speed_of_light=3e8,
+    #                                                 taus=taus[i]))
+    # save_results={"CSI":TestCSI}
     #np.save("/home/jingpeng/graduation_project/Channel_Simulation/debug_file/test_reconstructed_CSI.npy", save_results)
     #locate_scatterers_in_CSI(CSI, scatter_positions, Tx_positions, Rx_positions, Tx_orientations)
